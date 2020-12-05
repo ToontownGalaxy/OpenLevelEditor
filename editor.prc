@@ -25,6 +25,7 @@ notify-level-dna info
 
 # Model Path
 model-path    $MAIN_DIR
+model-path    resources
 
 # Enable/disable performance profiling tool and frame-rate meter
 want-pstats            #f

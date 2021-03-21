@@ -7,6 +7,9 @@
 leveleditor/hoods/SC.json
 leveleditor/stylefiles/sketched_central/*
 
+leveleditor/hoods/OT.json
+leveleditor/stylefiles/olde_toontown/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.pyc
@@ -128,6 +131,7 @@ notice.txt
 screenshots/
 maps/
 phase_*/
+leveleditor/*.bam
 
 # VS Code
 .history
@@ -136,3 +140,4 @@ phase_*/
 build.py
 *.bat
 ttle_dist.py
+leveleditor/settings.json

@@ -1,16 +1,21 @@
 import sys
 import Pmw
+import os
 
 from tkinter import *
 from tkinter import ttk
+from tkinter.filedialog import asksaveasfilename
 
 from direct.showbase.TkGlobal import *
 from direct.tkwidgets import Floater
 
 from .DNASerializer import DNASerializer
+from .AutoSaver import AutoSaver
 from .LevelStyleManager import *
 from .LevelEditorGlobals import *
 from .LESceneGraphExplorer import *
+
+from ott.ShaderRegistry import ShaderRegistry
 
 from toontown.fixes import VectorWidgets
 
@@ -63,6 +68,11 @@ class LevelEditorPanel(Pmw.MegaToplevel):
                             'Save DNA File',
                             label = 'Save DNA',
                             command = DNASerializer.outputDNADefaultFile)
+        menuBar.addmenuitem('Level Editor', 'command',
+                            'Export level as .BAM',
+                            label = 'Export as .BAM',
+                            command = self.exportToBam)
+
         menuBar.addmenuitem('Level Editor', 'separator')
         menuBar.addmenuitem('Level Editor', 'command',
                             'Edit Visibility Groups',
@@ -81,6 +91,7 @@ class LevelEditorPanel(Pmw.MegaToplevel):
                             'Make Street Along Curve',
                             label = 'Make Street Along Curve',
                             command = self.levelEditor.makeStreetAlongCurve)
+
         menuBar.addmenuitem('Level Editor', 'separator')
         menuBar.addmenuitem('Level Editor', 'command',
                             'Exit Level Editor Panel',
@@ -127,6 +138,12 @@ class LevelEditorPanel(Pmw.MegaToplevel):
                             'Open Injector',
                             label = 'Injector',
                             command = self.showInjector)
+        menuBar.addmenuitem('Advanced', 'separator')
+        menuBar.addmenuitem('Advanced', 'command',
+                            'User Set Auto Saver Options',
+                            label = 'Auto Saver Options',
+                            command = self.showAutoSaverDialog)
+
         # Corporate Clash Old Toontown-esque Filter
         if base.server == TOONTOWN_CORPORATE_CLASH:
             self.toggleOTVar = IntVar()
@@ -175,6 +192,41 @@ class LevelEditorPanel(Pmw.MegaToplevel):
                                                 defaultbutton = 0,
                                                 message_text = CONTROLS)
         self.controlsDialog.withdraw()
+
+        self.autoSaverDialog = Pmw.Dialog(parent, title = 'Autosaver Options',
+                                          buttons = ('Save Options',),
+                                          command = self.setAutoSaverInterval)
+        self.autoSaverDialog.withdraw()
+
+        self.autoSaverEnabled = IntVar()
+        self.autoSaverEnabled.set(settings['autosave-enabled'])
+        self.autoSaverEnable = ttk.Checkbutton(
+                self.autoSaverDialog.interior(),
+                text = 'Enable Autosaving', width = 20,
+                variable = self.autoSaverEnabled)
+
+        self.autoSaverDialogInterval = Pmw.Counter(self.autoSaverDialog.interior(),
+                                                   labelpos = 'w',
+                                                   label_text = 'Auto save interval in minutes:',
+                                                   entry_width = 10,
+                                                   entryfield_value = int(settings['autosave-interval']),
+                                                   entryfield_validate = {'validator': 'real',
+                                                                          'min':       1, 'max': 60
+                                                                          })
+
+        # self.autoSaverDialogMax = Pmw.Counter(self.autoSaverDialog.interior(),
+        #                                      labelpos = 'w',
+        #                                      label_text = 'Max auto save files:',
+        #                                      entry_width = 10,
+        #                                      entryfield_value = int(settings['autosave-max-files']),
+        #                                      entryfield_validate = {'validator': 'numeric',
+        #                                                             'min':       0, 'max': 99
+        #                                                             })
+
+        counters = (self.autoSaverEnable, self.autoSaverDialogInterval)  # , self.autoSaverDialogMax)
+        Pmw.alignlabels(counters)
+        for counter in counters:
+            counter.pack(fill = 'both', expand = 1)
 
         self.editMenu = Pmw.ComboBox(
                 menuFrame, labelpos = W,
@@ -375,7 +427,7 @@ class LevelEditorPanel(Pmw.MegaToplevel):
                     landmarkBuildingsPage, width = 24,
                     textvariable = self.landmarkBuildingNameString)
             self.landmarkBuildingNameBox.pack(expand = 0, fill = X)
-            
+
         self.bldgLabels = IntVar()
         self.bldgLabels.set(0)
         self.bldgLabelsButton = ttk.Checkbutton(
@@ -1466,6 +1518,19 @@ class LevelEditorPanel(Pmw.MegaToplevel):
     def setBattleCellType(self, name):
         self.levelEditor.currentBattleCellType = name
 
+    def setAutoSaverInterval(self, i):
+        if i == 'Save Options':
+            try:
+                settings['autosave-enabled'] = bool(self.autoSaverEnabled.get())
+                settings['autosave-interval'] = int(self.autoSaverDialogInterval.get())
+                # settings['autosave-max-files'] = float(self.autoSaverDialogMax.get())
+                # Reset the autosaver
+                AutoSaver.initializeAutoSaver()
+            except ValueError as e:
+                # Non-float was passed
+                raise e
+        self.autoSaverDialog.withdraw()
+
     def updateSelectedObjColor(self, color):
         try:
             obj = self.levelEditor.DNATarget
@@ -1506,6 +1571,10 @@ class LevelEditorPanel(Pmw.MegaToplevel):
         self.controlsDialog.show()
         self.controlsDialog.focus_set()
 
+    def showAutoSaverDialog(self):
+        self.autoSaverDialog.show()
+        self.autoSaverDialog.focus_set()
+
     def showInjector(self):
         self.injectorDialog.show()
         self.injectorDialog.focus_set()
@@ -1519,10 +1588,7 @@ class LevelEditorPanel(Pmw.MegaToplevel):
 
     def toggleOT(self):
         if self.toggleOTVar.get():
-            self.levelEditor.getNPToplevel().setShader(
-                    Shader.load(Shader.SL_GLSL,
-                                vertex = 'resources/shaders/tt_sha_render_bandw.vert',
-                                fragment = 'resources/shaders/tt_sha_render_bandw.frag'))
+            self.levelEditor.getNPToplevel().setShader(ShaderRegistry.get('render:black_and_white'))
         else:
             self.levelEditor.getNPToplevel().clearShader()
 
@@ -1531,3 +1597,18 @@ class LevelEditorPanel(Pmw.MegaToplevel):
             self.levelEditor.useDriveMode()
         else:
             self.levelEditor.useDirectFly()
+
+    def exportToBam(self):
+        """
+        Export level geometry as .bam
+        """
+        path = Filename.expandFrom(userfiles).toOsSpecific()
+        if not os.path.isdir(path):
+            path = '.'
+        fileName = asksaveasfilename(defaultextension = '.dna',
+                                     filetypes = (('Panda3D Model Files', '*.bam'), ('All files', '*')),
+                                     initialdir = path,
+                                     title = 'Export as .BAM',
+                                     parent = self.component('hull'))
+        if fileName:
+            self.levelEditor.getNPToplevel().writeBamFile(Filename.expandFrom(fileName))
